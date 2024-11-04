@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Battaglia Navale</title>
+    <style>
+        /* Stile per le griglie */
+        .grid-container { display: flex; gap: 30px; }
+        .grid { display: grid; grid-template-columns: repeat(5, 40px); gap: 5px; }
+        .cell { width: 40px; height: 40px; border: 1px solid #000; text-align: center; cursor: pointer; }
+        .cell.defense-cell-{x}-{y}.ship { background-color: blue; }
+        .hit { background-color: red !important; }
+        .miss { background-color: lightgrey !important; }
+        /* Opzionale: impedisci il puntatore per le celle di difesa */
+        .defense .cell { cursor: default; }
+    </style>
+</head>
+<body>
+    <h1>Battaglia Navale</h1>
+    <h2 id="status">In attesa di giocatori...</h2>
+    <div class="grid-container">
+        <div>
+            <h3>Griglia di Attacco</h3>
+            <div id="attackGrid" class="grid attack"></div>
+        </div>
+        <div>
+            <h3>La Tua Flotta</h3>
+            <div id="defenseGrid" class="grid defense"></div>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket(`ws://${location.host}`);
+        const attackGridDiv = document.getElementById("attackGrid");
+        const defenseGridDiv = document.getElementById("defenseGrid");
+        let player = null;
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === "start") {
+                player = data.player;
+                document.getElementById("status").innerText = `Sei il Giocatore ${player}`;
+                createBoards();
+            } else if (data.type === "attack") {
+                const isMyAttack = data.player === player;
+                const targetGrid = isMyAttack ? attackGridDiv : defenseGridDiv;
+                const cellIdPrefix = isMyAttack ? "attack" : "defense";
+                const cell = targetGrid.querySelector(`#${cellIdPrefix}-cell-${data.x}-${data.y}`);
+
+                if (cell) {
+                    // Aggiungi la classe 'hit' o 'miss' basata sull'esito
+                    cell.classList.add(data.hit ? "hit" : "miss");
+                } else {
+                    console.error(`Cella non trovata: #${cellIdPrefix}-cell-${data.x}-${data.y}`);
+                }
+            } else if (data.type === "win") {
+                alert(`Il Giocatore ${data.winner} ha vinto!`);
+                document.getElementById("status").innerText = `Il Giocatore ${data.winner} ha vinto!`;
+            } else if (data.type === "reset") {
+                attackGridDiv.innerHTML = "";
+                defenseGridDiv.innerHTML = "";
+                document.getElementById("status").innerText = "In attesa di giocatori...";
+            } else if (data.type === "placeShips") {
+                // Mostra le navi del giocatore nella griglia di difesa
+                data.ships.forEach(([x, y]) => {
+                    const cell = defenseGridDiv.querySelector(`#defense-cell-${x}-${y}`);
+                    if (cell) {
+                        cell.classList.add("ship");
+                    } else {
+                        console.error(`Cella per la nave non trovata: #defense-cell-${x}-${y}`);
+                    }
+                });
+            }
+        };
+
+        function createBoards() {
+            createGrid(attackGridDiv, "attack", (x, y) => {
+                ws.send(JSON.stringify({ type: "attack", player, x, y }));
+            });
+            createGrid(defenseGridDiv, "defense");
+        }
+
+        function createGrid(gridDiv, type, onClick) {
+            gridDiv.innerHTML = "";
+            for (let x = 0; x < 5; x++) {
+                for (let y = 0; y < 5; y++) {
+                    const cell = document.createElement("div");
+                    cell.classList.add("cell");
+                    cell.id = `${type}-cell-${x}-${y}`;
+                    if (type === "attack" && onClick) {
+                        cell.addEventListener("click", () => onClick(x, y));
+                    }
+                    gridDiv.appendChild(cell);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
